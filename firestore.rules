@@ -1,0 +1,21 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /links/{linkId} {
+      // Leitura pública (necessário para o redirecionamento funcionar para quem não tem login)
+      allow read: if true;
+      
+      // Criação: apenas usuários logados podem criar, e o userId deve ser o mesmo do usuário logado
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+      
+      // Atualização (Dono): o dono pode atualizar seus próprios links
+      allow update: if request.auth != null && request.auth.uid == resource.data.userId;
+      
+      // Atualização (Pública - Apenas cliques): Qualquer um pode atualizar SE estiver apenas incrementando os cliques
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['clicks']);
+      
+      // Deleção: apenas o dono pode deletar
+      allow delete: if request.auth != null && request.auth.uid == resource.data.userId;
+    }
+  }
+}
