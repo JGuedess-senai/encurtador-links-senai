@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../firebase/config';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, getDocs } from 'firebase/firestore';
-import { LogOut, Link as LinkIcon, Copy, Trash2, ExternalLink, Calendar, MousePointerClick } from 'lucide-react';
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, getDocs, updateDoc } from 'firebase/firestore';
+import { LogOut, Link as LinkIcon, Copy, Trash2, ExternalLink, Calendar, MousePointerClick, Edit2, X } from 'lucide-react';
 
 export default function Dashboard({ user }) {
   const [url, setUrl] = useState('');
@@ -10,6 +10,14 @@ export default function Dashboard({ user }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copiedId, setCopiedId] = useState(null);
+
+  // Edit states
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingLink, setEditingLink] = useState(null);
+  const [editUrl, setEditUrl] = useState('');
+  const [editCode, setEditCode] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState('');
 
   // Fetch links in real-time
   useEffect(() => {
@@ -91,6 +99,59 @@ export default function Dashboard({ user }) {
       setError('Erro ao encurtar o link.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openEditModal = (link) => {
+    setEditingLink(link);
+    setEditUrl(link.originalUrl);
+    setEditCode(link.shortCode);
+    setEditError('');
+    setIsEditModalOpen(true);
+  };
+
+  const closeEditModal = () => {
+    setIsEditModalOpen(false);
+    setEditingLink(null);
+  };
+
+  const handleUpdate = async (e) => {
+    e.preventDefault();
+    if (!editUrl || !editCode) return;
+    
+    let validUrl = editUrl;
+    if (!validUrl.startsWith('http://') && !validUrl.startsWith('https://')) {
+      validUrl = 'https://' + validUrl;
+    }
+
+    setEditLoading(true);
+    setEditError('');
+
+    try {
+      // Verifica colisão se o código foi alterado
+      if (editCode !== editingLink.shortCode) {
+        const linksRef = collection(db, 'links');
+        const codeQuery = query(linksRef, where("shortCode", "==", editCode));
+        const codeSnapshot = await getDocs(codeQuery);
+        
+        if (!codeSnapshot.empty) {
+          setEditError('Este código curto já está em uso. Tente outro.');
+          setEditLoading(false);
+          return;
+        }
+      }
+
+      await updateDoc(doc(db, 'links', editingLink.id), {
+        originalUrl: validUrl,
+        shortCode: editCode
+      });
+
+      closeEditModal();
+    } catch (err) {
+      console.error(err);
+      setEditError('Erro ao atualizar o link.');
+    } finally {
+      setEditLoading(false);
     }
   };
 
@@ -234,6 +295,14 @@ export default function Dashboard({ user }) {
                     </button>
                     
                     <button 
+                      onClick={() => openEditModal(link)}
+                      className="p-2 rounded-xl text-gray-400 hover:bg-brand-500/10 hover:text-brand-400 border border-transparent hover:border-brand-500/20 transition-all"
+                      title="Editar link"
+                    >
+                      <Edit2 className="w-5 h-5" />
+                    </button>
+
+                    <button 
                       onClick={() => handleDelete(link.id)}
                       className="p-2 rounded-xl text-gray-500 hover:bg-red-500/10 hover:text-red-400 border border-transparent hover:border-red-500/20 transition-all"
                       title="Excluir link"
@@ -248,6 +317,63 @@ export default function Dashboard({ user }) {
           )}
         </div>
       </main>
+
+      {/* Edit Modal */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeEditModal}></div>
+          <div className="glass-panel p-6 sm:p-8 rounded-3xl w-full max-w-md relative z-10 shadow-2xl shadow-brand-500/20 duration-200">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-white">Editar Link</h3>
+              <button onClick={closeEditModal} className="text-gray-400 hover:text-white transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdate} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-gray-300 pl-1">URL Original de Destino</label>
+                <input
+                  type="text"
+                  required
+                  value={editUrl}
+                  onChange={(e) => setEditUrl(e.target.value)}
+                  className="w-full bg-gray-900/80 border border-gray-700/80 rounded-xl py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 transition-all shadow-inner"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-gray-300 pl-1">Código Encurtado (Customizável)</label>
+                <div className="flex items-center">
+                  <span className="bg-gray-800 border border-gray-700/80 border-r-0 rounded-l-xl py-3 px-4 text-gray-400 text-sm">/r/</span>
+                  <input
+                    type="text"
+                    required
+                    value={editCode}
+                    onChange={(e) => setEditCode(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ''))}
+                    className="w-full bg-gray-900/80 border border-gray-700/80 rounded-r-xl py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 transition-all shadow-inner"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 pl-1 mt-1">Apenas letras, números, traços e underlines.</p>
+              </div>
+
+              {editError && <p className="text-red-400 text-sm mt-2">{editError}</p>}
+
+              <button
+                type="submit"
+                disabled={editLoading}
+                className="w-full mt-6 bg-brand-600 hover:bg-brand-500 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 shadow-lg flex items-center justify-center disabled:opacity-50"
+              >
+                {editLoading ? (
+                  <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                ) : (
+                  'Salvar Alterações'
+                )}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
