@@ -28,3 +28,7 @@ dist-ssr
 
 # Scripts
 *.ps1
+
+# Environment
+.env
+.env.*
