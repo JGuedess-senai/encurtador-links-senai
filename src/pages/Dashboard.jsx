@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../firebase/config';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, getDocs, updateDoc } from 'firebase/firestore';
-import { LogOut, Link as LinkIcon, Copy, Trash2, ExternalLink, Calendar, MousePointerClick, Edit2, X } from 'lucide-react';
+import { LogOut, Link as LinkIcon, Copy, Trash2, ExternalLink, Calendar, MousePointerClick, Edit2, X, QrCode, Download } from 'lucide-react';
+import { QRCodeCanvas } from 'qrcode.react';
 
 export default function Dashboard({ user }) {
   const [url, setUrl] = useState('');
@@ -18,6 +19,10 @@ export default function Dashboard({ user }) {
   const [editCode, setEditCode] = useState('');
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState('');
+
+  // QR Modal states
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [qrLink, setQrLink] = useState(null);
 
   // Fetch links in real-time
   useEffect(() => {
@@ -113,6 +118,28 @@ export default function Dashboard({ user }) {
   const closeEditModal = () => {
     setIsEditModalOpen(false);
     setEditingLink(null);
+  };
+
+  const openQrModal = (link) => {
+    setQrLink(link);
+    setIsQrModalOpen(true);
+  };
+
+  const closeQrModal = () => {
+    setIsQrModalOpen(false);
+    setQrLink(null);
+  };
+
+  const downloadQR = () => {
+    const canvas = document.getElementById('qr-canvas');
+    if (!canvas) return;
+    const pngUrl = canvas.toDataURL('image/png').replace('image/png', 'image/octet-stream');
+    const downloadLink = document.createElement('a');
+    downloadLink.href = pngUrl;
+    downloadLink.download = `QR_${qrLink.shortCode}.png`;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
   };
 
   const handleUpdate = async (e) => {
@@ -295,6 +322,14 @@ export default function Dashboard({ user }) {
                     </button>
                     
                     <button 
+                      onClick={() => openQrModal(link)}
+                      className="p-2 rounded-xl text-gray-400 hover:bg-brand-500/10 hover:text-brand-400 border border-transparent hover:border-brand-500/20 transition-all"
+                      title="Gerar QR Code"
+                    >
+                      <QrCode className="w-5 h-5" />
+                    </button>
+
+                    <button 
                       onClick={() => openEditModal(link)}
                       className="p-2 rounded-xl text-gray-400 hover:bg-brand-500/10 hover:text-brand-400 border border-transparent hover:border-brand-500/20 transition-all"
                       title="Editar link"
@@ -371,6 +406,45 @@ export default function Dashboard({ user }) {
                 )}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* QR Code Modal */}
+      {isQrModalOpen && qrLink && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeQrModal}></div>
+          <div className="glass-panel p-6 sm:p-8 rounded-3xl w-full max-w-sm relative z-10 shadow-2xl shadow-brand-500/20 duration-200 text-center">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <QrCode className="w-5 h-5 text-brand-400" /> QR Code
+              </h3>
+              <button onClick={closeQrModal} className="text-gray-400 hover:text-white transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-400 mb-6">Escaneie o código abaixo para acessar o link <strong>/r/{qrLink.shortCode}</strong></p>
+
+            <div className="bg-white p-4 rounded-2xl inline-block shadow-lg mx-auto mb-6">
+              <QRCodeCanvas 
+                id="qr-canvas"
+                value={`${window.location.origin}/r/${qrLink.shortCode}`} 
+                size={200}
+                bgColor={"#ffffff"}
+                fgColor={"#000000"}
+                level={"H"}
+                includeMargin={false}
+              />
+            </div>
+
+            <button
+              onClick={downloadQR}
+              className="w-full bg-brand-600 hover:bg-brand-500 text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 shadow-lg flex items-center justify-center gap-2"
+            >
+              <Download className="w-5 h-5" />
+              Baixar Imagem
+            </button>
           </div>
         </div>
       )}
